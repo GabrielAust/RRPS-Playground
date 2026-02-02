@@ -55,6 +55,12 @@ Collect self-play transitions:
 python scripts/selfplay_collect.py
 ```
 
+Train a tabular Q-learning baseline with league self-play:
+
+```
+python scripts/train_q_learning.py --episodes 2500 --eval-every 250
+```
+
 Run tests:
 
 ```

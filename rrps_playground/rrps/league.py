@@ -1,10 +1,14 @@
 """League utilities for RRPS."""
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Iterable, List
+
+import numpy as np
 
 from .agents import Agent
+from .eval import evaluate_win_rates
 from .env import RRPSEnv
 from .match import BestOf, MatchResult, ScoreTo, play_match, seed_order
 
@@ -63,6 +67,53 @@ class League:
                 **averages,
             }
         return leaderboard
+
+
+@dataclass(frozen=True)
+class OpponentSnapshot:
+    """Snapshot of an opponent agent."""
+
+    name: str
+    agent: Agent
+
+
+@dataclass
+class SelfPlayLeague:
+    """Self-play scaffolding with opponent snapshots and evaluations."""
+
+    env: RRPSEnv
+    opponents: List[OpponentSnapshot] = field(default_factory=list)
+
+    def add_snapshot(
+        self, name: str, agent: Agent, *, copy_agent: bool = True
+    ) -> None:
+        """Add a new opponent snapshot to the pool."""
+        snapshot = deepcopy(agent) if copy_agent else agent
+        self.opponents.append(OpponentSnapshot(name=name, agent=snapshot))
+
+    def sample_opponent(
+        self, rng: np.random.Generator
+    ) -> OpponentSnapshot:
+        """Sample a snapshot uniformly from the pool."""
+        if not self.opponents:
+            raise ValueError("Opponent pool is empty")
+        index = int(rng.integers(0, len(self.opponents)))
+        return self.opponents[index]
+
+    def evaluate_personas(
+        self,
+        agent: Agent,
+        personas: Iterable[OpponentSnapshot],
+        episodes: int,
+        seed: int | None = None,
+    ) -> Dict[str, Dict[str, float]]:
+        """Evaluate an agent against a set of persona opponents."""
+        results: Dict[str, Dict[str, float]] = {}
+        for persona in personas:
+            results[persona.name] = evaluate_win_rates(
+                self.env, agent, persona.agent, episodes=episodes, seed=seed
+            )
+        return results
 
 
 def _update_match_stats(

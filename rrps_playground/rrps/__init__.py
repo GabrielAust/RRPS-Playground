@@ -3,6 +3,7 @@
 from .agents import Agent, GreedyCounterLastAgent, RandomMaskedAgent, WSLSAgent
 from .config import RRPSConfig
 from .env import RRPSEnv
+from .learning import QTablePolicy, TabularQLearner
 from .match import BestOf, ScoreTo
 from .persona import PersonaAgent, PersonaConfig
 
@@ -17,4 +18,6 @@ __all__ = [
     "PersonaConfig",
     "BestOf",
     "ScoreTo",
+    "QTablePolicy",
+    "TabularQLearner",
 ]
