@@ -22,11 +22,16 @@ class RoundRecord:
     counts_p0: Tuple[int, int, int]
     counts_p1: Tuple[int, int, int]
     # Future toggles placeholders
-    signal: object | None = None
-    challenge: object | None = None
-    bet: object | None = None
-    commitment: object | None = None
-    tell: object | None = None
+    signal_p0: object | None = None
+    signal_p1: object | None = None
+    challenge_p0: object | None = None
+    challenge_p1: object | None = None
+    bet_p0: object | None = None
+    bet_p1: object | None = None
+    commitment_p0: object | None = None
+    commitment_p1: object | None = None
+    tell_p0: object | None = None
+    tell_p1: object | None = None
 
 
 class RRPSEnv:
@@ -110,6 +115,7 @@ class RRPSEnv:
 
         rewards = self._rewards_from_outcome(outcome_p0)
 
+        round_index = self.round_index
         event = RoundRecord(
             round_index=self.round_index,
             action_p0=resolved_p0,
@@ -125,6 +131,8 @@ class RRPSEnv:
         terminated = self.is_terminated()
         info: Dict[str, object] = {
             "events_tail": self.events[-1:],
+            "action_mask": self.action_masks(),
+            "round": round_index,
             "enable_signals": self.config.enable_signals,
             "enable_challenges": self.config.enable_challenges,
             "enable_side_bets": self.config.enable_side_bets,
