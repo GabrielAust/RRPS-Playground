@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 import numpy as np
 
@@ -16,6 +16,7 @@ class RoundRecord:
     """Record of a single round."""
 
     round_index: int
+    phase: str
     action_p0: int | None
     action_p1: int | None
     outcome_p0: int
@@ -43,10 +44,13 @@ class RRPSEnv:
         self.max_rounds = self.config.resolved_max_rounds()
         self.rng = np.random.default_rng(self.config.seed)
         self.round_index = 0
+        self.phase = "play"
         self.counts_p0 = self.config.inventories_p0
         self.counts_p1 = self.config.inventories_p1
         self.history: List[Tuple[int, int]] = []
         self.events: List[Dict[str, object]] = []
+        self.pre_step_hooks: List[Callable[["RRPSEnv"], None]] = []
+        self.post_step_hooks: List[Callable[["RRPSEnv"], None]] = []
 
     def seed(self, seed: int | None) -> None:
         """Reseed RNG."""
@@ -57,6 +61,7 @@ class RRPSEnv:
         if seed is not None:
             self.seed(seed)
         self.round_index = 0
+        self.phase = "play"
         self.counts_p0 = self.config.inventories_p0
         self.counts_p1 = self.config.inventories_p1
         self.history = []
@@ -89,6 +94,9 @@ class RRPSEnv:
         if self.is_terminated():
             raise ValueError("Episode already terminated")
 
+        for hook in self.pre_step_hooks:
+            hook(self)
+
         mask_p0 = mask_from_counts(self.counts_p0)
         mask_p1 = mask_from_counts(self.counts_p1)
 
@@ -118,6 +126,7 @@ class RRPSEnv:
         round_index = self.round_index
         event = RoundRecord(
             round_index=self.round_index,
+            phase=self.phase,
             action_p0=resolved_p0,
             action_p1=resolved_p1,
             outcome_p0=outcome_p0,
@@ -133,12 +142,15 @@ class RRPSEnv:
             "events_tail": self.events[-1:],
             "action_mask": self.action_masks(),
             "round": round_index,
+            "phase": self.phase,
             "enable_signals": self.config.enable_signals,
             "enable_challenges": self.config.enable_challenges,
             "enable_side_bets": self.config.enable_side_bets,
             "enable_commitments": self.config.enable_commitments,
             "enable_noisy_tells": self.config.enable_noisy_tells,
         }
+        for hook in self.post_step_hooks:
+            hook(self)
         return obs, rewards, terminated, info
 
     def is_terminated(self) -> bool:
