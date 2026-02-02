@@ -172,7 +172,7 @@ Each call to `step()` appends one event dict to `env.events` and includes the mo
 ```
 {
   "round_index": int,                 # 0-based round index before increment
-  "phase": str,                       # currently always "play"
+  "phase": str,                       # "play" (signals set the next phase to "signal" in info)
   "action_p0": int | None,            # resolved action (0/1/2) or None if forfeited/none
   "action_p1": int | None,
   "outcome_p0": int,                  # win=1, tie=0, loss=-1
@@ -191,8 +191,22 @@ Each call to `step()` appends one event dict to `env.events` and includes the mo
 }
 ```
 
-The placeholder keys exist to preserve log/observation compatibility when future features (signals, challenges,
-side bets, commitments, noisy tells) are implemented.
+These fields exist to preserve log/observation compatibility; they are populated when the matching
+`enable_*` flags are set and remain `None` otherwise.
+
+### Signals and challenges (deception-lite)
+
+When `enable_signals=True`, the environment alternates between a lightweight signal phase and the normal play
+phase. Use `env.set_signals(signal_p0, signal_p1)` before calling `step()` to log cheap-talk messages. Signals
+do not affect action legality or base rewards.
+
+When `enable_challenges=True`, you may pass `challenge_p0`/`challenge_p1` to `step()` (or leave them unset). Each
+challenge incurs `challenge_cost`. If the challenged player signaled an action different from the revealed action,
+the challenged player pays `challenge_penalty`; otherwise, the challenger pays `challenge_penalty`.
+
+Side bets, commitments, and noisy tells are logged when their corresponding config flags are enabled via the
+`bet_*`, `commitment_*`, and `tell_*` fields in the event log. Their payoff rules are intentionally minimal and
+can be layered on later without breaking the event schema.
 
 Observations are configurable but default to:
 

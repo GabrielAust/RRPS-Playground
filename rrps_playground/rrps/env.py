@@ -44,13 +44,21 @@ class RRPSEnv:
         self.max_rounds = self.config.resolved_max_rounds()
         self.rng = np.random.default_rng(self.config.seed)
         self.round_index = 0
-        self.phase = "play"
+        self.phase = "signal" if self.config.enable_signals else "play"
         self.counts_p0 = self.config.inventories_p0
         self.counts_p1 = self.config.inventories_p1
         self.history: List[Tuple[int, int]] = []
         self.events: List[Dict[str, object]] = []
         self.pre_step_hooks: List[Callable[["RRPSEnv"], None]] = []
         self.post_step_hooks: List[Callable[["RRPSEnv"], None]] = []
+        self._pending_signal_p0: object | None = None
+        self._pending_signal_p1: object | None = None
+        self._pending_bet_p0: object | None = None
+        self._pending_bet_p1: object | None = None
+        self._pending_commitment_p0: object | None = None
+        self._pending_commitment_p1: object | None = None
+        self._pending_tell_p0: object | None = None
+        self._pending_tell_p1: object | None = None
 
     def seed(self, seed: int | None) -> None:
         """Reseed RNG."""
@@ -61,11 +69,19 @@ class RRPSEnv:
         if seed is not None:
             self.seed(seed)
         self.round_index = 0
-        self.phase = "play"
+        self.phase = "signal" if self.config.enable_signals else "play"
         self.counts_p0 = self.config.inventories_p0
         self.counts_p1 = self.config.inventories_p1
         self.history = []
         self.events = []
+        self._pending_signal_p0 = None
+        self._pending_signal_p1 = None
+        self._pending_bet_p0 = None
+        self._pending_bet_p1 = None
+        self._pending_commitment_p0 = None
+        self._pending_commitment_p1 = None
+        self._pending_tell_p0 = None
+        self._pending_tell_p1 = None
         return self._obs()
 
     def obs_dim(self) -> int:
@@ -87,8 +103,52 @@ class RRPSEnv:
             "p1": mask_from_counts(self.counts_p1),
         }
 
+    def set_signals(self, signal_p0: object | None, signal_p1: object | None) -> None:
+        """Record cheap-talk signals before stepping."""
+        if not self.config.enable_signals:
+            raise ValueError("Signals are disabled by config")
+        self._pending_signal_p0 = signal_p0
+        self._pending_signal_p1 = signal_p1
+        self.phase = "play"
+
+    def set_side_bets(self, bet_p0: object | None, bet_p1: object | None) -> None:
+        """Record side bets before stepping."""
+        if not self.config.enable_side_bets:
+            raise ValueError("Side bets are disabled by config")
+        self._pending_bet_p0 = bet_p0
+        self._pending_bet_p1 = bet_p1
+
+    def set_commitments(
+        self, commitment_p0: object | None, commitment_p1: object | None
+    ) -> None:
+        """Record commitments before stepping."""
+        if not self.config.enable_commitments:
+            raise ValueError("Commitments are disabled by config")
+        self._pending_commitment_p0 = commitment_p0
+        self._pending_commitment_p1 = commitment_p1
+
+    def set_noisy_tells(self, tell_p0: object | None, tell_p1: object | None) -> None:
+        """Record noisy tells before stepping."""
+        if not self.config.enable_noisy_tells:
+            raise ValueError("Noisy tells are disabled by config")
+        self._pending_tell_p0 = tell_p0
+        self._pending_tell_p1 = tell_p1
+
     def step(
-        self, action_p0: int, action_p1: int
+        self,
+        action_p0: int,
+        action_p1: int,
+        *,
+        signal_p0: object | None = None,
+        signal_p1: object | None = None,
+        challenge_p0: object | None = None,
+        challenge_p1: object | None = None,
+        bet_p0: object | None = None,
+        bet_p1: object | None = None,
+        commitment_p0: object | None = None,
+        commitment_p1: object | None = None,
+        tell_p0: object | None = None,
+        tell_p1: object | None = None,
     ) -> Tuple[ObsDict, RewardTuple, bool, Dict[str, object]]:
         """Advance one step."""
         if self.is_terminated():
@@ -96,6 +156,46 @@ class RRPSEnv:
 
         for hook in self.pre_step_hooks:
             hook(self)
+
+        if self.config.enable_signals and self.phase == "signal":
+            self.phase = "play"
+
+        resolved_signal_p0, resolved_signal_p1 = self._resolve_pre_step_choice(
+            signal_p0,
+            signal_p1,
+            self._pending_signal_p0,
+            self._pending_signal_p1,
+            self.config.enable_signals,
+        )
+        resolved_bet_p0, resolved_bet_p1 = self._resolve_pre_step_choice(
+            bet_p0,
+            bet_p1,
+            self._pending_bet_p0,
+            self._pending_bet_p1,
+            self.config.enable_side_bets,
+        )
+        resolved_commitment_p0, resolved_commitment_p1 = self._resolve_pre_step_choice(
+            commitment_p0,
+            commitment_p1,
+            self._pending_commitment_p0,
+            self._pending_commitment_p1,
+            self.config.enable_commitments,
+        )
+        resolved_tell_p0, resolved_tell_p1 = self._resolve_pre_step_choice(
+            tell_p0,
+            tell_p1,
+            self._pending_tell_p0,
+            self._pending_tell_p1,
+            self.config.enable_noisy_tells,
+        )
+        self._pending_signal_p0 = None
+        self._pending_signal_p1 = None
+        self._pending_bet_p0 = None
+        self._pending_bet_p1 = None
+        self._pending_commitment_p0 = None
+        self._pending_commitment_p1 = None
+        self._pending_tell_p0 = None
+        self._pending_tell_p1 = None
 
         mask_p0 = mask_from_counts(self.counts_p0)
         mask_p1 = mask_from_counts(self.counts_p1)
@@ -121,7 +221,20 @@ class RRPSEnv:
             self.counts_p1 = update_counts(self.counts_p1, resolved_p1)
             self.history.append((resolved_p0, resolved_p1))
 
-        rewards = self._rewards_from_outcome(outcome_p0)
+        rewards = list(self._rewards_from_outcome(outcome_p0))
+        resolved_challenge_p0, resolved_challenge_p1 = self._resolve_challenges(
+            challenge_p0, challenge_p1
+        )
+        if self.config.enable_challenges:
+            self._apply_challenge_costs(
+                rewards,
+                resolved_signal_p0,
+                resolved_signal_p1,
+                resolved_p0,
+                resolved_p1,
+                resolved_challenge_p0,
+                resolved_challenge_p1,
+            )
 
         round_index = self.round_index
         event = RoundRecord(
@@ -132,12 +245,24 @@ class RRPSEnv:
             outcome_p0=outcome_p0,
             counts_p0=self.counts_p0,
             counts_p1=self.counts_p1,
+            signal_p0=resolved_signal_p0,
+            signal_p1=resolved_signal_p1,
+            challenge_p0=resolved_challenge_p0,
+            challenge_p1=resolved_challenge_p1,
+            bet_p0=resolved_bet_p0,
+            bet_p1=resolved_bet_p1,
+            commitment_p0=resolved_commitment_p0,
+            commitment_p1=resolved_commitment_p1,
+            tell_p0=resolved_tell_p0,
+            tell_p1=resolved_tell_p1,
         )
         self.events.append(event.__dict__)
 
         self.round_index += 1
         obs = self._obs()
         terminated = self.is_terminated()
+        if self.config.enable_signals and not terminated:
+            self.phase = "signal"
         info: Dict[str, object] = {
             "events_tail": self.events[-1:],
             "action_mask": self.action_masks(),
@@ -151,7 +276,7 @@ class RRPSEnv:
         }
         for hook in self.post_step_hooks:
             hook(self)
-        return obs, rewards, terminated, info
+        return obs, (float(rewards[0]), float(rewards[1])), terminated, info
 
     def is_terminated(self) -> bool:
         """Check termination condition."""
@@ -183,6 +308,58 @@ class RRPSEnv:
         if outcome_p0 == -1:
             return (self.config.reward_loss, self.config.reward_win)
         return (self.config.reward_tie, self.config.reward_tie)
+
+    @staticmethod
+    def _resolve_pre_step_choice(
+        provided_p0: object | None,
+        provided_p1: object | None,
+        pending_p0: object | None,
+        pending_p1: object | None,
+        enabled: bool,
+    ) -> Tuple[object | None, object | None]:
+        if not enabled:
+            return None, None
+        resolved_p0 = provided_p0 if provided_p0 is not None else pending_p0
+        resolved_p1 = provided_p1 if provided_p1 is not None else pending_p1
+        return resolved_p0, resolved_p1
+
+    def _resolve_challenges(
+        self, challenge_p0: object | None, challenge_p1: object | None
+    ) -> Tuple[object | None, object | None]:
+        if not self.config.enable_challenges:
+            return None, None
+        return challenge_p0, challenge_p1
+
+    def _apply_challenge_costs(
+        self,
+        rewards: List[float],
+        signal_p0: object | None,
+        signal_p1: object | None,
+        action_p0: int | None,
+        action_p1: int | None,
+        challenge_p0: object | None,
+        challenge_p1: object | None,
+    ) -> None:
+        if challenge_p0:
+            rewards[0] -= self.config.challenge_cost
+            if self._challenge_correct(signal_p1, action_p1):
+                rewards[1] -= self.config.challenge_penalty
+            else:
+                rewards[0] -= self.config.challenge_penalty
+        if challenge_p1:
+            rewards[1] -= self.config.challenge_cost
+            if self._challenge_correct(signal_p0, action_p0):
+                rewards[0] -= self.config.challenge_penalty
+            else:
+                rewards[1] -= self.config.challenge_penalty
+
+    @staticmethod
+    def _challenge_correct(signal: object | None, action: int | None) -> bool:
+        if signal in (0, 1, 2):
+            if action is None:
+                return True
+            return int(action) != int(signal)
+        return False
 
     def _obs(self) -> ObsDict:
         p0 = self._build_obs(player="p0")
