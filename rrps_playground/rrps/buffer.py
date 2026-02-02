@@ -11,11 +11,12 @@ import numpy as np
 @dataclass
 class Transition:
     obs: np.ndarray
+    mask: np.ndarray
     action: int
     reward: float
     next_obs: np.ndarray
     done: bool
-    mask: np.ndarray
+    info_small: Dict[str, object]
 
 
 @dataclass
@@ -29,14 +30,16 @@ class TransitionBuffer:
         if not self.transitions:
             return {
                 "obs": np.empty((0,)),
+                "mask": np.empty((0,)),
                 "action": np.empty((0,), dtype=np.int64),
                 "reward": np.empty((0,), dtype=np.float32),
                 "next_obs": np.empty((0,)),
                 "done": np.empty((0,), dtype=bool),
-                "mask": np.empty((0,)),
+                "info_small": np.empty((0,), dtype=object),
             }
         return {
             "obs": np.stack([transition.obs for transition in self.transitions]),
+            "mask": np.stack([transition.mask for transition in self.transitions]),
             "action": np.array(
                 [transition.action for transition in self.transitions], dtype=np.int64
             ),
@@ -50,7 +53,13 @@ class TransitionBuffer:
             "done": np.array(
                 [transition.done for transition in self.transitions], dtype=bool
             ),
-            "mask": np.stack([transition.mask for transition in self.transitions]),
+            "info_small": np.array(
+                [
+                    json.dumps(transition.info_small, sort_keys=True)
+                    for transition in self.transitions
+                ],
+                dtype=object,
+            ),
         }
 
     def save_jsonl(self, path: str) -> None:
@@ -63,5 +72,11 @@ class TransitionBuffer:
                     "next_obs": transition.next_obs.tolist(),
                     "done": transition.done,
                     "mask": transition.mask.tolist(),
+                    "info_small": transition.info_small,
                 }
                 handle.write(f"{json.dumps(record)}\n")
+
+    def save_npz(self, path: str) -> None:
+        """Save the buffer to a NumPy .npz archive."""
+        data = self.to_numpy()
+        np.savez_compressed(path, **data)
