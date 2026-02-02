@@ -75,6 +75,119 @@ obs = env.reset(seed=123)
 mask = env.action_masks()["p0"]
 ```
 
+### Observation layout (exact indices)
+
+Observations are flat `float32` vectors with a deterministic, index-stable layout. The layout is controlled by the
+`include_*` flags and `history_len` in `RRPSConfig`. Indices below are **0-based** and apply to each player's
+observation independently.
+
+**Default layout (include_self_counts=True, include_opponent_counts=False, include_history=True, history_len=5)**
+
+| Index range | Feature block | Details |
+| --- | --- | --- |
+| `0..2` | Self counts | Remaining `(rock, paper, scissors)` counts for the observing player. |
+| `3..32` | History (5 rounds × 6) | For each of the last 5 rounds: `[self_one_hot(3), opp_one_hot(3)]`. Oldest first; padded with zeros if fewer than 5 rounds. |
+| `33` | Round progress | `round_index / max_rounds` in `[0, 1]`. |
+
+**General formula**
+
+Let:
+
+- `S = 3` if `include_self_counts` else `0`
+- `O = 3` if `include_opponent_counts` else `0`
+- `H = history_len * 6` if `include_history` else `0`
+- `R = 1` (always present; normalized round index)
+
+Then the observation length is `S + O + H + R` and the indices are assigned in this order:
+
+1. **Self counts** (`S` values): indices `0 .. S-1`
+2. **Opponent counts** (`O` values): indices `S .. S+O-1`
+3. **History** (`H` values): indices `S+O .. S+O+H-1`
+4. **Round progress** (`1` value): index `S+O+H`
+
+**History block indexing**
+
+When history is enabled, each round contributes 6 floats:
+
+```
+round i offset = S + O + i * 6
+round i features:
+  [offset + 0..2] -> self action one-hot (R, P, S)
+  [offset + 3..5] -> opponent action one-hot (R, P, S)
+```
+
+Rounds are ordered from **oldest to newest** within the last `history_len` rounds. If there are fewer than
+`history_len` rounds so far, leading rounds are padded with zeros (both players = all-zero one-hot).
+
+Actions use the integer mapping **0=Rock, 1=Paper, 2=Scissors** throughout observations, masks, and logs.
+
+### Action masks
+
+`env.action_masks()` returns a dict with `{"p0": mask0, "p1": mask1}`. Each mask is a length-3 int8 vector aligned
+to the `(Rock, Paper, Scissors)` action indices:
+
+- `1` means the action is **legal/available** (remaining count > 0).
+- `0` means the action is **illegal/unavailable** (remaining count == 0).
+
+Masks are derived directly from each player's remaining inventory counts.
+
+### Determinism guarantees
+
+The environment is deterministic given:
+
+- The same `RRPSConfig` (including inventories and `illegal_action_mode`),
+- The same seed passed to `RRPSEnv(seed=...)` or `env.reset(seed=...)`,
+- The same sequence of actions passed to `step()`.
+
+When `illegal_action_mode="auto_mask_random"`, any illegal action is replaced by a sampled legal action using the
+environment RNG (`numpy.random.default_rng`). This sampling is deterministic under the same seed and call order.
+
+### Illegal action modes
+
+The `illegal_action_mode` config controls how invalid actions are handled:
+
+- `"error"`: Raise `ValueError` immediately when a player picks an unavailable or out-of-range action.
+- `"auto_mask_random"`: Replace the illegal action with a random **legal** action sampled from the action mask.
+  - If the mask has no legal actions (all zeros), the action resolves to `None` (no move).
+- `"forfeit_round"`: Treat the illegal action as **no move** (`None`) for that player.
+
+Resolution effects (per step):
+
+- If both players resolve to `None`, the round is a tie and no inventories change.
+- If one player resolves to `None` and the other has a legal action, the legal action player wins the round and
+  only their inventory is decremented.
+- If both actions are legal, both inventories decrement and outcome follows standard RPS rules.
+
+### Event log schema
+
+Each call to `step()` appends one event dict to `env.events` and includes the most recent entry in
+`info["events_tail"]`. The schema is stable and includes placeholder keys for future mechanics:
+
+```
+{
+  "round_index": int,                 # 0-based round index before increment
+  "phase": str,                       # currently always "play"
+  "action_p0": int | None,            # resolved action (0/1/2) or None if forfeited/none
+  "action_p1": int | None,
+  "outcome_p0": int,                  # win=1, tie=0, loss=-1
+  "counts_p0": (int, int, int),       # remaining inventory after the round
+  "counts_p1": (int, int, int),
+  "signal_p0": object | None,         # placeholder, default None
+  "signal_p1": object | None,
+  "challenge_p0": object | None,      # placeholder, default None
+  "challenge_p1": object | None,
+  "bet_p0": object | None,            # placeholder, default None
+  "bet_p1": object | None,
+  "commitment_p0": object | None,     # placeholder, default None
+  "commitment_p1": object | None,
+  "tell_p0": object | None,           # placeholder, default None
+  "tell_p1": object | None
+}
+```
+
+The placeholder keys exist to preserve log/observation compatibility when future features (signals, challenges,
+side bets, commitments, noisy tells) are implemented.
+
 Observations are configurable but default to:
 
 - Own remaining counts (3 floats)
