@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from rrps.agents import RandomMaskedAgent
 from rrps.buffer import Transition, TransitionBuffer
-from rrps.config import RRPSConfig
+from rrps.cli import load_config_from_args
 from rrps.env import RRPSEnv
 
 
 def main() -> None:
-    env = RRPSEnv(RRPSConfig())
+    config = load_config_from_args(description=__doc__)
+    env = RRPSEnv(config)
     agent = RandomMaskedAgent()
     buffer = TransitionBuffer()
 

@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 from rrps.agents import GreedyCounterLastAgent, RandomMaskedAgent, WSLSAgent
-from rrps.config import RRPSConfig
+from rrps.cli import load_config_from_args
 from rrps.env import RRPSEnv
 from rrps.league import League
 
 
 def main() -> None:
-    env = RRPSEnv(RRPSConfig())
+    config = load_config_from_args(description=__doc__)
+    env = RRPSEnv(config)
     league = League(env)
     league.add_agent("random", RandomMaskedAgent())
     league.add_agent("greedy", GreedyCounterLastAgent())
