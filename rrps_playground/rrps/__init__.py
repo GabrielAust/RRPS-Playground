@@ -1,8 +1,10 @@
 """RRPS playground package."""
 
+from .agents import Agent, GreedyCounterLastAgent, RandomMaskedAgent, WSLSAgent
 from .config import RRPSConfig
 from .env import RRPSEnv
-from .agents import Agent, RandomMaskedAgent, GreedyCounterLastAgent, WSLSAgent
+from .match import BestOf, ScoreTo
+from .persona import PersonaAgent, PersonaConfig
 
 __all__ = [
     "RRPSConfig",
@@ -11,4 +13,8 @@ __all__ = [
     "RandomMaskedAgent",
     "GreedyCounterLastAgent",
     "WSLSAgent",
+    "PersonaAgent",
+    "PersonaConfig",
+    "BestOf",
+    "ScoreTo",
 ]
