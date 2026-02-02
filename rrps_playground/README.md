@@ -31,6 +31,18 @@ Run a single episode with logging:
 python scripts/run_episode.py
 ```
 
+All scripts support optional CLI flags for configuration:
+
+```
+python scripts/run_episode.py --seed 7 --counts 3 3 3 --history-len 10 --illegal-action-mode auto_mask_random
+```
+
+You can also drop a `config.json`/`config.yaml` in the working directory or pass a path:
+
+```
+python scripts/tournament.py --config configs/experiment.json
+```
+
 Run a round-robin tournament across baseline agents:
 
 ```

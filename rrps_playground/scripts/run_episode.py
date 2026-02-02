@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 from rrps.agents import GreedyCounterLastAgent, RandomMaskedAgent
-from rrps.config import RRPSConfig
+from rrps.cli import load_config_from_args
 from rrps.env import RRPSEnv
 
 
 def main() -> None:
-    config = RRPSConfig()
+    config = load_config_from_args(description=__doc__)
     env = RRPSEnv(config)
     agent_p0 = RandomMaskedAgent()
     agent_p1 = GreedyCounterLastAgent()
