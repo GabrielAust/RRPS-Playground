@@ -1,38 +1,16 @@
 """Collect self-play transitions into a simple buffer."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List
-
-import numpy as np
-
 from rrps.agents import RandomMaskedAgent
+from rrps.buffer import Transition, TransitionBuffer
 from rrps.config import RRPSConfig
 from rrps.env import RRPSEnv
-
-
-@dataclass
-class Transition:
-    obs: np.ndarray
-    action: int
-    reward: float
-    next_obs: np.ndarray
-    done: bool
-    mask: np.ndarray
-
-
-@dataclass
-class Buffer:
-    transitions: List[Transition] = field(default_factory=list)
-
-    def add(self, transition: Transition) -> None:
-        self.transitions.append(transition)
 
 
 def main() -> None:
     env = RRPSEnv(RRPSConfig())
     agent = RandomMaskedAgent()
-    buffer = Buffer()
+    buffer = TransitionBuffer()
 
     obs = env.reset(seed=env.config.seed)
     while True:
@@ -48,7 +26,15 @@ def main() -> None:
                 next_obs=next_obs["p0"],
                 done=terminated,
                 mask=masks["p0"],
-            )
+            ),
+            Transition(
+                obs=obs["p1"],
+                action=action_opp,
+                reward=rewards[1],
+                next_obs=next_obs["p1"],
+                done=terminated,
+                mask=masks["p1"],
+            ),
         )
         obs = next_obs
         if terminated:
