@@ -1,0 +1,13 @@
+[project]
+name = "rrps-playground"
+version = "0.1.0"
+description = "Rock-Paper-Scissors with inventory playground"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
