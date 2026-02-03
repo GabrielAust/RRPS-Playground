@@ -237,6 +237,15 @@ Future toggles (signals, challenges, bets, commitments, noisy tells) are already
 2. Update the `info` dict to surface any new metadata.
 3. Keep existing observation toggles stable for backward compatibility.
 
+## 3D client goals (tabletop arena)
+
+When building a 3D visualization layer, treat the RRPS environment as the **authoritative truth** and keep the client as a renderer/input surface only. The intended tabletop arena experience is:
+
+- **Physical tokens per player:** render Rock/Paper/Scissors tokens in front of each player, with counts driven by `env.events` and `counts_p0/counts_p1`.
+- **Round reveal animation:** each round should visually flip/reveal both players’ chosen tokens simultaneously, based on the event log, not local prediction logic.
+- **Event-driven state:** the client should read from environment events and inventory counts; it should not compute outcomes or manage its own game rules.
+- **Agent agnostic:** any agent (human input, scripted persona, RL policy) should be swappable without changing the renderer, as long as it feeds actions into the environment.
+
 ## Coding standards
 
 - Python 3.10+
